@@ -156,11 +156,24 @@ trx_crc32() {
 }
 
 tclinux_trx_hdr() {
-    # TRX header magic: "2RDH" for big endian, "HDR2" for little endian
-    if [ "$endian" = "le" ]; then
-        printf 'HDR2' | to_hex
+    # TRX header magic: "2RDH" for big endian, "HDR2" for little endian.
+    # The CMHK GS2210 uses the older TrendChip "tclinux" header, whose magic is
+    # "CSK0" (verified on the stock image: 43 53 4b 30 at offset 0 of both the
+    # tclinux and tclinux_slave partitions). It is selected by --model, because
+    # matching on the image file name would also match the subtarget name
+    # "en751221" and change the magic for every other device in this target.
+    if [ "$model" = "GS2210" ]; then
+        if [ "$endian" = "le" ]; then
+            printf '0KSC' | to_hex
+        else
+            printf 'CSK0' | to_hex
+        fi
     else
-        printf '2RDH' | to_hex
+        if [ "$endian" = "le" ]; then
+            printf 'HDR2' | to_hex
+        else
+            printf '2RDH' | to_hex
+        fi
     fi
 
     # Length of the header
@@ -197,6 +210,13 @@ tclinux_trx_hdr() {
     fi
 
     # Load address (CONFIG_ZBOOT_LOAD_ADDRESS)
+    # This is the address at which the kernel is linked (KERNEL_LOADADDR in the
+    # image Makefile), NOT the address the bootloader decompresses to. The
+    # GS2210 bootloader is a "free bootbase" build, which always decompresses to
+    # 0x80002000 (its stock image header says exactly that), so the kernel is
+    # linked at 0x80020000 and the tclinux-free-bootbase-jump build step
+    # prepends a 0x1e000 byte trampoline that hops from 0x80002000 to
+    # 0x80020000. Writing 0x80002000 here would contradict that shim.
     hex32 0x80020000
 
     # "reserved" 128 bytes of zeros
